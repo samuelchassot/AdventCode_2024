@@ -26,9 +26,6 @@ object Day03Part02 {
   }
 
   def parse(s: String): List[Op] = 
-    // val firstMul = mulRegex.findFirstMatchIn(s)
-    // val firstDo = doRegex.findFirstMatchIn(s)
-    // val firstDont = dontRegex.findFirstMatchIn(s)
     if s.isEmpty() then
       return Nil
 
