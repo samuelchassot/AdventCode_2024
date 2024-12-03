@@ -47,10 +47,6 @@ object Day03Part02 {
     case Op.Mul(e1, e2) :: tl if !doMode => compute(tl, doMode)
     case Nil => 0
   }
-        
-    
-  
-    
 }
 
 @main def Main03: Unit = {
