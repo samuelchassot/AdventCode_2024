@@ -9,12 +9,12 @@ object Utils03 {
   }
 }
 
-object ThreePart01 {
+object Day03Part01 {
   val mulRegex: Regex = """mul\((\d\d?\d?),(\d\d?\d?)\)""".r
 }
 
-object ThreePart02 {
-  import ThreePart01.mulRegex
+object Day03Part02 {
+  import Day03Part01.mulRegex
 
   val doRegex = """do()""".r
   val dontRegex = """don't\(\)""".r
@@ -57,8 +57,8 @@ object ThreePart02 {
 }
 
 @main def Main03: Unit = {
-  import ThreePart01.*
-  import ThreePart02.*
+  import Day03Part01.*
+  import Day03Part02.*
   val testS = "mul(123,43)"
 
   testS match {
