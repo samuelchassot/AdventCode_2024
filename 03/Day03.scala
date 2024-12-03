@@ -52,20 +52,11 @@ object Day03Part02 {
 @main def Main03: Unit = {
   import Day03Part01.*
   import Day03Part02.*
-  val testS = "mul(123,43)"
-
-  testS match {
-    case mulRegex(e1, e2) => println(f"Matched: $e1 * $e2")
-    case _ => println("No match")
-  }
 
   val lines = Utils03.openFile("03.txt")
   val memory = lines.mkString
   val mat = mulRegex.findAllMatchIn(memory).toList
   println(f"Part 1: sum = ${mat.map(m => m.group(1).toInt * m.group(2).toInt).sum}")
-
-
-  println(f"DEBUG: Don't() matches? ${dontRegex.matches("don't()")}")
   
   val parsed: List[Op] = parse(memory)
   val res2 = compute(parsed, true)
