@@ -80,7 +80,7 @@ object Day04Part02 {
 
 
 
-@main def Main() = 
+@main def Main04() = 
   val testIn = 
               List( "MMMSXXMASM",
                     "MSAMXMSMSA",
