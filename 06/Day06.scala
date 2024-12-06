@@ -2,6 +2,7 @@
 import scala.collection.parallel.CollectionConverters._
 import scala.collection.parallel.ForkJoinTaskSupport
 import java.util.concurrent.ForkJoinPool
+import scala.collection.mutable.HashSet
 
 object Utils06 {
   def openFile(path: String): List[String] = {
@@ -11,13 +12,12 @@ object Utils06 {
   }
 }
 
-
-enum Direction(diff: (Int, Int)):
-  def vector: (Int, Int) = diff
-  case North extends Direction(diff = (0, -1))
-  case East extends Direction(diff = (1, 0))
-  case South extends Direction(diff = (0, 1))
-  case West extends Direction(diff = (-1, 0))
+enum Direction(vectorr: Coordinate):
+  def vector: Coordinate = vectorr
+  case North extends Direction(vectorr = (0, -1))
+  case East extends Direction(vectorr = (1, 0))
+  case South extends Direction(vectorr = (0, 1))
+  case West extends Direction(vectorr = (-1, 0))
 end Direction
 
 object Direction:
@@ -28,18 +28,22 @@ object Direction:
     case '<' => West
 end Direction
 
-extension (coord: (Int, Int)) infix def +(other: (Int, Int)): (Int, Int) = (coord._1 + other._1, coord._2 + other._2)
+type Coordinate = (Int, Int)
+type PointOfView = (Coordinate, Direction)
+
+extension (coord: Coordinate) infix def +(other: Coordinate): Coordinate = (coord._1 + other._1, coord._2 + other._2)
 
 case class Lab(l: List[String], northSouthLength: Int, eastWestLength: Int):
   require(l.size == northSouthLength && l.forall(_.size == eastWestLength))
   
   def isWithinLab(x: Int, y: Int): Boolean = x >= 0 && x < eastWestLength && y >= 0 && y < northSouthLength
+
   def get(x: Int, y: Int): Char = {
     require(isWithinLab(x, y))
     l(y)(x)
   }
   def isObstacle(x: Int, y: Int): Boolean = isWithinLab(x, y) && get(x, y) == '#'
-  def isObstacle(coord: (Int, Int)): Boolean = isObstacle(coord._1, coord._2)
+  def isObstacle(coord: Coordinate): Boolean = isObstacle(coord._1, coord._2)
 
   def replaceWith(x: Int, y: Int, c: Char): Lab = 
     require(isWithinLab(x, y))
@@ -56,19 +60,17 @@ object Guard:
 end Guard
 
 case class Guard(lab: Lab):
-  
-  def step(currentAt: (Int, Int), currentDir: Direction): ((Int, Int), Direction) = 
-    val isLookingAtObstacle = lab.isObstacle(currentAt + currentDir.vector)
-    val newDirection = if isLookingAtObstacle then Guard.rotate(currentDir) else currentDir
-    (currentAt + newDirection.vector, newDirection)
+  def step(pov: PointOfView): PointOfView = 
+    val isLookingAtObstacle = lab.isObstacle(pov._1 + pov._2.vector)
+    val newDirection = if isLookingAtObstacle then Guard.rotate(pov._2) else pov._2
+    (pov._1 + newDirection.vector, newDirection)
 
-  def pathFrom(currentAt: (Int, Int), currentDir: Direction): LazyList[(Int, Int)] = 
-    val (nextAt, nextDir) = step(currentAt, currentDir)
-    currentAt #:: pathFrom(nextAt, nextDir)
+  def pathFrom(pov: PointOfView): LazyList[PointOfView] = 
+    val nextPov = step(pov)
+    pov #:: pathFrom(nextPov)
 
-  def pathFromWithDirection(currentAt: (Int, Int), currentDir: Direction): LazyList[((Int, Int), Direction)] = 
-    val (nextAt, nextDir) = step(currentAt, currentDir)
-    (currentAt, currentDir) #:: pathFromWithDirection(nextAt, nextDir)
+  def simulateWithinLab(pov: PointOfView): LazyList[PointOfView] = 
+    pathFrom(pov).takeWhile((coord, _) => lab.isWithinLab(coord._1, coord._2))
 end Guard 
 
 object Day06Part01:
@@ -78,145 +80,74 @@ object Day06Part01:
     * @param l
     * @return
     */
-  def parse(l: List[String]): (Guard, (Int, Int), Direction) = 
+  def parse(l: List[String]): (Guard, PointOfView) = 
     require(l.size > 0 && l.head.size > 0)
     val startingY = l.indexWhere(s => s.contains("^") || s.contains("<") || s.contains(">") || s.contains("v"))
     assert(startingY >= 0 && startingY < l.size)
     val startingX = l(startingY).indexWhere(c => c  == '^' || c == '<' || c  == '>' || c == 'v')
     assert(startingX >= 0 && startingX < l.head.size)
     val guardChar = l(startingY)(startingX)
+    println(guardChar)
     val direction = Direction.fromChar(guardChar)
     val lab = Lab(l.map(s => s.replace(guardChar, '.')), northSouthLength = l.size, eastWestLength = l.head.size)
     val guard = Guard(lab)
     
-    (guard, (startingX, startingY), direction)
+    (guard, ((startingX, startingY), direction))
 
 
-  def countVisitedDistinctLocations(g: Guard, startingAt: (Int, Int), startingDir: Direction): Int = 
-    g.pathFrom(startingAt, startingDir).takeWhile((x, y) => g.lab.isWithinLab(x, y)).distinct.size
+  def countVisitedDistinctLocations(g: Guard, startingPov: PointOfView): Int = 
+    g.simulateWithinLab(startingPov).map(_._1).toSet.size
 
-  def visitedMap(g: Guard, startingAt: (Int, Int), startingDir: Direction): Lab = 
-    g.pathFrom(startingAt, startingDir)
-      .takeWhile((x, y) => g.lab.isWithinLab(x, y))
+  def visitedMap(g: Guard, startingPov: PointOfView): Lab = 
+    g.simulateWithinLab(startingPov).map(_._1)
       .foldLeft(g.lab)((lab, coord) => lab.replaceWith(coord._1, coord._2, 'X'))
 
 end Day06Part01
 
 object Day06Part02:
-  /*
-  Here the idea is the following:
-    To create loop with the guard path, we need to find the places where she crossed her past path. 
-    Among those places, we need to keep only those where she would continue on the path if she's rotating because facing an obstacle.
+  def looping(guard: Guard, startingPov: PointOfView): Boolean = 
+    val followedPath = guard.simulateWithinLab(startingPov).take(guard.lab.eastWestLength * guard.lab.northSouthLength + 1)
+    followedPath.size >= guard.lab.eastWestLength * guard.lab.northSouthLength
 
-    e.g.:    
-    if the first time she crossed, she was going to the right, and the second time she's going down, then we couldn't make her loop by adding an obstacle at the spot marked with a 'O' below. 
-    Indeed, she would turn to the left here, and wouldn't loop. So this crossing is not to keep.
-             |
-             |
-             V
-       ----->X--->
-             O
-             |
-             V
-  in this example however, the crossing marked with a 'X' is to keep, because she would go to the left again with the obstable at the spot marked with a 'O'.
-  And therefore, she would loop.
-             |
-             |
-             V
-       <-----X<---
-             O
-             |
-             V
-
-  Once we have the crossings, the obstacles positions are one step ahead of the crossing, in the direction the guard is going the second time she crosses the spot.
-  */
-
-  /**
-    * Returns all the crossing points of the path followed by the guard, i.e., all the spots she's been more than once, along with the direction she's travelling each time she's passing.
-    *
-    * @param g
-    * @param startingAt
-    * @param startingDir
-    * @return
-    */
-  def crossings(g: Guard, startingAt: (Int, Int), startingDir: Direction): List[((Int, Int), List[Direction])] = 
-    val path = g.pathFromWithDirection(startingAt, startingDir).takeWhile((coord, _) => g.lab.isWithinLab(coord._1, coord._2)).toList
-    val crossings = path.groupBy(cross => cross._1).filter((_, v) => v.size > 1)
-    crossings.keys.map(k => (k, crossings(k).map(_._2))).toList
+  // def looping2(guard: Guard, startingAt: Coordinate, startingDir: Direction): Boolean = 
+  //     val visitedStates = scala.collection.mutable.HashSet[(Coordinate, Direction)]()
   
-
-  def validCrossings(crossings: List[((Int, Int), List[Direction])]): List[((Int, Int), List[Direction])] = 
-    crossings.filter((coord, directions) => 
-      val firstDir = directions.head
-      val secondDir = directions(1)
-      Guard.rotate(secondDir) == firstDir
-    )
-
-  
-
-
-  def possibleObstaclesPositionsNumber(g: Guard, startingAt: (Int, Int), startingDir: Direction): Int = 
-    val followedPath = g.pathFromWithDirection(startingAt, startingDir).takeWhile((coord, _) => g.lab.isWithinLab(coord._1, coord._2)).toList
-    // This lazy list represents the alternative paths if the guard would have rotated when at the position index i in the followed path.
-    // This is representing all alternative universes where we put an obstacle at the position so that the guard rotates at the step i
-    val alternativePaths: List[(Int, (Int, Int), LazyList[((Int, Int), Direction)])] = g.pathFromWithDirection(startingAt, startingDir).takeWhile((coord, _) => g.lab.isWithinLab(coord._1, coord._2)).zipWithIndex.map((pos, i) => 
-      val (coord, dir) = pos
-      val obstablePos = coord + dir.vector
-      val pathIfObstacle = g.pathFromWithDirection(coord, Guard.rotate(dir))
-      (i, obstablePos, pathIfObstacle)
-    ).toList
-
-    def nonLoopingPrefixWithinLab(l: LazyList[((Int, Int), Direction)], acc: LazyList[((Int, Int), Direction)] = LazyList.empty): LazyList[((Int, Int), Direction)] = 
-     if l.isEmpty then acc
-     else 
-       val (coord, dir) = l.head
-       if !g.lab.isWithinLab(coord._1, coord._2) || acc.contains((coord, dir)) then acc
-       else nonLoopingPrefixWithinLab(l.tail, acc :+ (coord, dir))
+  //     var currentAt = startingAt
+  //     var currentDir = startingDir
       
-    val parList = alternativePaths.par
-    val forkJoinPool = new ForkJoinPool(16)
-    parList.tasksupport = ForkJoinTaskSupport(forkJoinPool)
+  //     while (guard.lab.isWithinLab(currentAt._1, currentAt._2)) {
+  //       // Check if we've been here before with the same direction
+  //       if (!visitedStates.add((currentAt, currentDir))) {
+  //         // State repeats => loop detected
+  //         return true
+  //       }
 
-    println("alternativePaths.size = " + alternativePaths.size)
-    // parList.filter((i, obstablePos, path) => 
-    // //  println(i) 
-     
-    //  !(obstablePos._1 == startingAt._1 && obstablePos._2 == startingAt._2) &&
-    //   nonLoopingPrefixWithinLab(path).exists((coord, dir) => followedPath.take(i - 1).contains((coord, dir)))
-    // ).map( (_, obstablePos, _) => obstablePos).distinct.size
+  //       // Move to the next state
+  //       val (nextAt, nextDir) = guard.step(currentAt, currentDir)
+  //       currentAt = nextAt
+  //       currentDir = nextDir
+  //     }
+      
+  //     // Exited the map => no loop
+  //     false
+  def possibleObstaclesPositionsNumber(g: Guard, startingPov: PointOfView): Int = 
+    val possibleObstaclesPositions = (0 to g.lab.northSouthLength).flatMap(y => (0 to g.lab.eastWestLength).map(x => (x, y))).filter(coord => g.lab.isWithinLab(coord._1, coord._2) && coord != startingPov._1)
+    // println("possibleObstaclesPositions = " + possibleObstaclesPositions)
 
-    parList.filter((i, obstablePos, path) => 
-      // !(obstablePos._1 == startingAt._1 && obstablePos._2 == startingAt._2) &&
-      path.takeWhile((coord, _) => g.lab.isWithinLab(coord._1, coord._2)).take(g.lab.northSouthLength * g.lab.eastWestLength).length >= g.lab.northSouthLength * g.lab.eastWestLength 
-    ).map( (_, obstablePos, _) => obstablePos).distinct.size
-
-
-
-  def possibleObstaclesPositionsNumber2(g: Guard, startingAt: (Int, Int), startingDir: Direction): Int = 
-    val followedPath = g.pathFromWithDirection(startingAt, startingDir).takeWhile((coord, _) => g.lab.isWithinLab(coord._1, coord._2)).toList
-    val possibleObstaclesPositions: List[(Int, Int)] = followedPath.flatMap((coord, dir) => 
-      val obstablePos = coord + dir.vector
-      if !g.lab.isWithinLab(obstablePos._1, obstablePos._2) || obstablePos == startingAt then None
-      else Some(obstablePos)
-    ).distinct
-
-    val newPossibleGuards: List[Guard] = 
+    val newPossibleGuards= 
       possibleObstaclesPositions.map(obstaclePos => 
         val newLab = g.lab.replaceWith(obstaclePos._1, obstaclePos._2, '#')
         Guard(newLab)
       )
 
     val parList = newPossibleGuards.par
-    val forkJoinPool = new ForkJoinPool(16)
+    val forkJoinPool = new ForkJoinPool(8)
     parList.tasksupport = ForkJoinTaskSupport(forkJoinPool)
 
-    val guardsFollowedPaths = parList.map(g => g.pathFromWithDirection(startingAt, startingDir).takeWhile((coord, _) => g.lab.isWithinLab(coord._1, coord._2)))
-    guardsFollowedPaths.filter(path => path.take(g.lab.northSouthLength * g.lab.eastWestLength).length >= g.lab.northSouthLength * g.lab.eastWestLength).size
-
+    parList.count(g => looping(g, startingPov))
     
 
 end Day06Part02
-
 
 @main def Main06() = 
   val testIn = 
@@ -232,23 +163,23 @@ end Day06Part02
             "#.........", // 8
             "......#...") // 9
 
-  val (guardTest, startingAtTest, startingDirTest) = Day06Part01.parse(testIn)
+  val (guardTest, startPovTest) = Day06Part01.parse(testIn)
   
   println("Part 1 --------------------------------")
 
-  println(f"Test: distrinct visited locations = ${Day06Part01.countVisitedDistinctLocations(guardTest, startingAtTest, startingDirTest)}")
-  val mapAfter = Day06Part01.visitedMap(guardTest, startingAtTest, startingDirTest)
+  println(f"Test: distinct visited locations = ${Day06Part01.countVisitedDistinctLocations(guardTest, startPovTest)}")
+  val mapAfter = Day06Part01.visitedMap(guardTest, startPovTest)
   println(f"Test: map after guard: \n${mapAfter.l.mkString("\n")}")
 
   val in = Utils06.openFile("06.txt")
-  val (guard, startingAt, startingDir) = Day06Part01.parse(in)
-  println(f"Part 1: distrinct visited locations = ${Day06Part01.countVisitedDistinctLocations(guard, startingAt, startingDir)}")
+  val (guard, startingPov) = Day06Part01.parse(in)
+  println(f"starting position and direction: $startingPov")
+  println(f"Part 1: distinct visited locations = ${Day06Part01.countVisitedDistinctLocations(guard, startingPov)}")
 
   println("Part 2 --------------------------------")
-  val testCrossings = Day06Part02.crossings(guardTest, startingAtTest, startingDirTest)
-  println(f"Test: crossings = ${testCrossings}")
-  println(s"Test: crossings map: \n${testCrossings.map((coord, _) => coord).foldLeft(guardTest.lab)((lab, coord) => lab.replaceWith(coord._1, coord._2, '+')).l.mkString("\n")}")
-  println(f"Test: valid crossings = ${Day06Part02.validCrossings(testCrossings)}")
-  println(f"Test: possible obstacles positions number = ${Day06Part02.possibleObstaclesPositionsNumber2(guardTest, startingAtTest, startingDirTest)}")
+  println(f"Test: possible obstacles positions number = ${Day06Part02.possibleObstaclesPositionsNumber(guardTest, startPovTest)}")
+  println(f"DEBUG: paths of test guard: ${guardTest.pathFrom(startPovTest).take(100).toList}")
 
-  println(f"Part2: possible obstacles positions number = ${Day06Part02.possibleObstaclesPositionsNumber2(guard, startingAt, startingDir)}")
+  println(f"debug: replacing 0, 0 with # in test lab: \n${guardTest.lab.replaceWith(0, 0, '#').l.mkString("\n")}")
+  println(f"debug: replacing 9, 9 with # in test lab: \n${guardTest.lab.replaceWith(9, 9, '#').l.mkString("\n")}")
+  println(f"Part2: possible obstacles positions number = ${Day06Part02.possibleObstaclesPositionsNumber(guard, startingPov)}")
