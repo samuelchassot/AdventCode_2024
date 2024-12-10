@@ -1,4 +1,4 @@
-object Utils {
+object Utils02 {
   def openFile(path: String): List[String] = {
     val source = scala.io.Source.fromFile(path)
     val lines = source.getLines().toList
@@ -35,7 +35,7 @@ case class Report(levels: List[Int]){
 }
 
 
-@main def Main(): Unit = {
+@main def Main02(): Unit = {
   import Utils.*
   val lines = openFile("02.txt")
   val reports = parseLines(lines)
