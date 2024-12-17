@@ -64,6 +64,26 @@ object Day15:
         if isBox((x, y))
       yield boxGPS((x, y))
       ).sum
+    
+    def bigBoxGPS(coord: (Coordinate, Coordinate)): Long = 
+      require(isBigBox(coord._1) && isBigBox(coord._2))
+      require(get(coord._1) == '[' && get(coord._2) == ']')
+
+      val distanceToLeft = Math.min(coord._1.x, coord._2.x)
+
+      assert(coord._1.y == coord._2.y)
+
+      distanceToLeft  + coord._1.y * 100
+    
+    def bigBoxGPSScore: Long = 
+      (for 
+        y <- 0 until height
+        x <- 0 until width
+        if isBigBox((x, y))
+      yield 
+        if get((x, y)) == '[' then ((x, y), (x + 1, y))
+        else ((x - 1, y), (x, y))
+      ).map(p => Seq(p._1, p._2).sorted).distinct.map(p => bigBoxGPS((p(0), p(1))).toLong).sum
 
     def canMove(coord: Coordinate, direction: Char): Boolean = 
       if DEBUG then println(f"Can move for coord = $coord and direction = $direction")
@@ -164,7 +184,7 @@ object Day15:
       x <- 0 until width
     yield map.setObject(x, y, mapContent(y)(x))
 
-    val moves = lMoves.map(_.toCharArray()).flatten
+    val moves = lMoves.map(_.toCharArray()).flatten.filter(c => c == '^' || c == 'v' || c == '<' || c == '>')
     (map, moves)
 end Day15
 
@@ -172,7 +192,7 @@ def animate(frames: Seq[String]): Unit =
   frames.foreach(f => 
     print("\u001b[H\u001b[2J")
     println(f)
-    Thread.sleep(100)
+    Thread.sleep(60)
   )
 @main def Main15 : Unit = 
   val testIn = List(
@@ -246,35 +266,44 @@ def animate(frames: Seq[String]): Unit =
   )
   val (testTestMap2, testTestMoves2) = Day15.parse(testTestIn2)
   val testTestMap2Wider = testTestMap2.toWider()
-  println(f"test map: \n$testTestMap2")
-  println(f"test map wider: \n$testTestMap2Wider")
-  println(f"test moves: $testTestMoves2")
+  println(f"test test map: \n$testTestMap2")
+  println(f"test test map wider: \n$testTestMap2Wider")
+  println(f"test test moves: $testTestMoves2")
 
   val miniFrames = testTestMoves2.map({ move => 
     testTestMap2Wider.robotStep(move)
     f"$testTestMap2Wider"
   })
-  animate(miniFrames)
-  return
+  // animate(miniFrames)
   println(f"After moves: \n$testTestMap2Wider")
-
+  println("\n\n")
 
   val (testMap2, testMoves2) = Day15.parse(testIn)
   val testWiderMap = testMap2.toWider()
+  println(f"Test map: \n$testMap2")
   println(f"Test map wider: \n$testWiderMap")
 
-  testWiderMap.robotStep('<')
-  println(f"Test map wider after <: \n$testWiderMap")
-
-  testWiderMap.robotStep('^')
-  println(f"Test map wider after ^: \n$testWiderMap")
   println("WIDER TEST STARTS")
   val frames = testMoves2.map({ move => 
     testWiderMap.robotStep(move)
     f"$testWiderMap"
   })
-  animate(frames)
+  // animate(frames)
   // Print all frames without moving the terminal, with a frame rate of 20 fps to make it easier to follow
   println(f"Test map wider after moves: \n$testWiderMap")
+
+
+  val (map2, moves2) = Day15.parse(Utils15.openFile("15.txt"))
+  val mapWider = map2.toWider()
+  println(f"Part 2 map: \n$map2")
+  println(f"Part 2 map wider: \n$mapWider")
+
+  val frames2 = moves2.map({ move => 
+    mapWider.robotStep(move)
+    f"$mapWider"
+  })
+  // animate(frames2)
+  println(f"Part 2 map wider after moves: \n$mapWider")
+  println(f"Part 2 map Big Box GPS score: ${mapWider.bigBoxGPSScore}")
 
 
