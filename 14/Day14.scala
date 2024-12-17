@@ -117,15 +117,25 @@ object Day14 {
     def isMaybeChristmasTree(map: Array[Array[Char]]): Boolean = 
         var yy = 0
         while(yy < map.length) {
-            // which should be . at line yy
-            val x1 = map(yy).length / 2 - yy
-            val x2 = map(yy).length / 2 + yy
-            if yy > 15 then 
-                return true
-            if map(yy)(x1) == '.' || map(yy)(x2) == '.' then return false
+            // let's try to find 10 robots in a row on one of the row
+            var xx = 0
+            var inLine = false
+            var seenRobots = 0
+            while(xx < map(yy).length) {
+                if inLine && map(yy)(xx) == '.' then 
+                    seenRobots = 0 
+                    inLine = false
+                if !inLine && map(yy)(xx) != '.' then 
+                    inLine = true
+                    seenRobots = 1
+                if inLine && map(yy)(xx) != '.' then 
+                    seenRobots += 1
+                    if seenRobots > 10 then return true
+                xx += 1
+            }
             yy += 1
         }
-        return true
+        return false
     def printMap(robots: Seq[Robot], spaceWidth: Int, spaceHeight: Int, quadrantCut: Boolean = false): Unit = 
         val map = getMap(robots, spaceWidth, spaceHeight, quadrantCut)
         map.foreach(row => println(row.mkString("")))
@@ -150,9 +160,9 @@ object Day14 {
         var min = Int.MaxValue
         var minState = (robotsMoving, steps)
         while (flag && steps < period) {
-            writeMapToFile(Day14.getMap(robotsMoving.toArray, spaceWidth, spaceHeight), steps, f"14out.txt")
+            // writeMapToFile(Day14.getMap(robotsMoving.toArray, spaceWidth, spaceHeight), steps, f"14out.txt")
             if Day14.isMaybeChristmasTree(Day14.getMap(robotsMoving.toArray, spaceWidth, spaceHeight)) then 
-                println(f"Test: Christmas tree found after ${steps} steps")
+                println(f"Test: Christmas tree maybe found after ${steps} steps")
                 Day14.printMap(robotsMoving.toArray, spaceWidth, spaceHeight)
                 flag = false
             else if robotsMoving.toSet == initRobots then 
